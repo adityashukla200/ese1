@@ -3,7 +3,7 @@ import axios from 'axios';
 import './App.css';
 
 function App() {
-  const API_BASE = 'http://localhost:5000';
+  const API_BASE = 'https://ese1.onrender.com';
 
   const [candidates, setCandidates] = useState([]);
   const [shortlisted, setShortlisted] = useState([]);
