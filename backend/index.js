@@ -137,7 +137,7 @@ Rank them from best to worst with match percentage and short reason.
       },
       {
         headers: {
-          'Authorization': `Bearer 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`,
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json'
         }
       }
