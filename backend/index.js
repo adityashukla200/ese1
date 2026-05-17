@@ -34,9 +34,7 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB Atlas Connected Successfully'))
   .catch(err => {
     console.error('❌ MongoDB Connection Error:', err.message);
-    console.log('\n💡 Tips:');
-    console.log('1. Check your password in .env file');
-    console.log('2. Make sure IP is whitelisted in MongoDB Atlas');
+    console.log('\n💡 Tips: Check your .env file password and IP Whitelist');
   });
 
 // Candidate Schema
@@ -53,7 +51,7 @@ const Candidate = mongoose.model('Candidate', CandidateSchema);
 
 // ==================== ROUTES ====================
 
-// Add Candidate
+// 1. Add Candidate
 app.post('/api/candidates', async (req, res) => {
   try {
     const candidate = new Candidate(req.body);
@@ -64,7 +62,7 @@ app.post('/api/candidates', async (req, res) => {
   }
 });
 
-// Get All Candidates
+// 2. Get All Candidates
 app.get('/api/candidates', async (req, res) => {
   try {
     const candidates = await Candidate.find().sort({ createdAt: -1 });
@@ -74,7 +72,7 @@ app.get('/api/candidates', async (req, res) => {
   }
 });
 
-// Basic Match
+// 3. Basic Match
 app.post('/api/match', async (req, res) => {
   try {
     const { requiredSkills, minExperience = 0 } = req.body;
@@ -105,16 +103,23 @@ app.post('/api/match', async (req, res) => {
   }
 });
 
-// AI Shortlist
+// 4. AI Smart Shortlist (Improved)
 app.post('/api/ai/shortlist', async (req, res) => {
   try {
     const { requiredSkills, minExperience = 0, preferredSkills = [] } = req.body;
-    const candidates = await Candidate.find();
 
-    const filteredCandidates = candidates.filter(c => c.experience >= minExperience);
+    if (!requiredSkills || !Array.isArray(requiredSkills) || requiredSkills.length === 0) {
+      return res.status(400).json({ error: "Required skills are mandatory" });
+    }
+
+    const candidates = await Candidate.find();
+    const filteredCandidates = candidates.filter(c => c.experience >= Number(minExperience));
 
     if (filteredCandidates.length === 0) {
-      return res.json({ message: "No candidates meet minimum experience." });
+      return res.json({ 
+        message: "No candidates meet the minimum experience requirement.",
+        candidates: []
+      });
     }
 
     const candidatesList = filteredCandidates
@@ -122,12 +127,26 @@ app.post('/api/ai/shortlist', async (req, res) => {
       .join('\n');
 
     const prompt = `
-Job Requirements: ${requiredSkills.join(', ')} | Min Experience: ${minExperience} years
+You are an expert technical recruiter.
+
+Job Requirements:
+- Required Skills: ${requiredSkills.join(', ')}
+- Minimum Experience: ${minExperience} years
+- Preferred Skills: ${preferredSkills.length ? preferredSkills.join(', ') : 'None'}
+
 Candidates:
 ${candidatesList}
 
-Rank them from best to worst with match percentage and short reason.
+Rank the candidates from best to worst. For each candidate provide:
+- Estimated Match Percentage
+- Strong points
+- Weak points (if any)
+- Final Recommendation (Strong / Good / Fair)
+
+Be concise and professional.
 `;
+
+    console.log("🤖 Calling OpenRouter AI...");
 
     const response = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
@@ -138,19 +157,28 @@ Rank them from best to worst with match percentage and short reason.
       {
         headers: {
           'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'http://localhost:5173',
+          'X-Title': 'Candidate Shortlisting System'
+        },
+        timeout: 30000
       }
     );
 
+    console.log("✅ AI Response Received");
+
     res.json({
       candidates: filteredCandidates,
-      aiRecommendation: response.data.choices[0].message.content
+      aiRecommendation: response.data.choices[0].message.content,
+      totalCandidates: filteredCandidates.length
     });
 
   } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: 'AI request failed' });
+    console.error("🔥 AI Error:", error.response?.data || error.message);
+    res.status(500).json({ 
+      error: "AI request failed",
+      details: error.response?.data?.error || error.message 
+    });
   }
 });
 
